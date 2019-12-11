@@ -1,16 +1,45 @@
 const express = require("express");
+const multer = require("multer");
 const Post = require('../models/post');
 const router = express.Router();
 
-router.post('', (req,res,next) => {
+const MIME_TYPE_MAP = {
+  'image/png': 'png',
+  'image/jpeg': 'jpeg',
+  'image/jpg': 'jpg',
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const isValid = MIME_TYPE_MAP[file.mimetype];
+    let error = new Error("Invalid mime type");
+    if(isValid){
+      error = null;
+    }
+    cb(error, "images");
+  },
+  filename: (req, file, cb) => {
+    const name = file.originalname.toLowerCase().split(' ').join('-');
+    const ext = MIME_TYPE_MAP[file.mimetype];
+    console.log("EXT", name + '-' + Date.now() + '.' + ext);
+    cb(null, name + '-' + Date.now() + '.' + ext);
+  }
+});
+
+router.post('', multer({storage: storage}).single("image"), (req,res,next) => {
+  const url = req.protocol + '://' + req.get("host");
   const post = new Post({
     title: req.body.title,
-    content: req.body.content
+    content: req.body.content,
+    imagePath: url + "/images/" + req.file.filename
   });
   post.save().then(result => {
     res.status(201).json({
       message: 'Post Added successfully',
-      postId: result._id
+      post: {
+        ...result, // advanced js all values and then override the id
+        id: result._id,
+      }
     });
   });
 
@@ -37,12 +66,19 @@ router.get('/:id', (req, res, next) => {
       });
 });
 
-router.put('/:id', (req, res, next) => {
+router.put('/:id', multer({storage: storage}).single("image"), (req, res, next) => {
+  let imagepath = req.body.imagePath;
+  if(req.file) {
+    const url = req.protocol + '://' + req.get("host");
+    imagepath = url + "/images/" + req.file.filename;
+  }
   const post = new Post({
     _id: req.body.id,
     title: req.body.title,
-    content: req.body.content
+    content: req.body.content,
+    imagePath: imagepath
   });
+  console.log(post);
   Post.updateOne({_id: req.params.id}, post )
     .then(documents => {
       res.status(200).json({
